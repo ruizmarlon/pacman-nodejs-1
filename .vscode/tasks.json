@@ -1,0 +1,17 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "docker-compose up",
+      "type": "shell",
+      "command": "./bin/linux/development-compose-up.sh"
+    },
+    {
+      "label": "docker-compose up --build",
+      "type": "shell",
+      "command": "./bin/linux/development-compose-up.sh --build"
+    }
+  ]
+}

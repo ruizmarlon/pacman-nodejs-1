@@ -1,0 +1,12 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: pacman
+spec:
+  rules:
+    - host: ${DOCKER_APPLICATION_FQDN}
+      http:
+        paths:
+          - backend:
+              serviceName: pacman
+              servicePort: 80

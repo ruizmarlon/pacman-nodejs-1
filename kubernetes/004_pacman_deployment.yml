@@ -1,0 +1,19 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    name: pacman
+  name: pacman
+spec:
+  replicas: 0
+  template:
+    metadata:
+      labels:
+        name: pacman
+    spec:
+      containers:
+        - image: ${DOCKER_REGISTRY_HOSTNAME}/${DOCKER_IMAGE_NAMESPACE}/${DOCKER_IMAGE_REPOSITORY}:${DOCKER_IMAGE_TAG}
+          name: pacman
+          ports:
+            - containerPort: 8080
+              name: http-server

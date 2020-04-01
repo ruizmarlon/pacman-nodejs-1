@@ -1,0 +1,17 @@
+version: "3.7"
+
+services:
+  mongo:
+    restart: always
+    image: mongo:${MONGO_DB_TAG:-latest}
+    expose:
+      - "27017"
+    ports:
+      - "27017:27017"
+
+  pacman:
+    image: ${REGISTRY:-dtr.west.us.se.dckr.org}/${ORGANIZATION:-"launch-party"}/pacman-nodejs:${PACMAN_TAG:-latest}
+    links:
+      - mongo:mongo
+    ports:
+      - "8080:8080"

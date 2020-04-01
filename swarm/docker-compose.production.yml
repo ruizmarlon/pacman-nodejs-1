@@ -1,0 +1,27 @@
+version: "3.7"
+
+services:
+  mongo:
+    restart: "always"
+    image: "mongo:latest"
+    expose:
+      - "27017"
+    ports:
+      - "27017:27017"
+
+  pacman:
+    build:
+      context: "./"
+      dockerfile: "./Dockerfile"
+    depends_on:
+      - "mongo"
+    environment:
+      - "MONGO_SERVICE_HOST=mongo"
+    links:
+      - "mongo:mongo"
+    ports:
+      - "8080:8080"
+    volumes:
+      - type: "bind"
+        source: "./src"
+        target: "/home/node/app/src"

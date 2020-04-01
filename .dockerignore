@@ -1,0 +1,7 @@
+.vscode/
+bin/linux/
+bin/windows/
+node_modules
+
+.prettierrrc
+npm-debug.log

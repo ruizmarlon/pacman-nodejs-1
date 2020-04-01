@@ -1,0 +1,26 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    name: mongo
+  name: mongo
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: mongo:${MONGO_TAG:-latest}
+    spec:
+      containers:
+        - image: mongo
+          name: mongo
+          ports:
+            - name: mongo
+              containerPort: 27017
+          volumeMounts:
+            - name: mongo-db
+              mountPath: /data/db
+      volumes:
+        - name: mongo-db
+          persistentVolumeClaim:
+            claimName: mongo-storage
