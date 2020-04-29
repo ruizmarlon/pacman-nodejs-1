@@ -1,6 +1,6 @@
 #!/bin/ash
 set -e
 
-/wait-for ${MONGODB_HOST}:27017
+/wait-for ${MONGODB_HOST:-mongo}:27017
 
 exec "$@"
