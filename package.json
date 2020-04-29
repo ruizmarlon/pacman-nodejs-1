@@ -3,7 +3,7 @@
   "version": "0.9.0",
   "description": "Pac-Man Node.js Game",
   "author": "Aaron Rueth <arueth@mirantis.com>",
-  "main": "src/src/server.js",
+  "main": "src/server.js",
   "scripts": {
     "start": "node .",
     "dev-container": "nodemon src/server.js"
