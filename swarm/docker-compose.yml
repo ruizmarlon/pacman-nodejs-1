@@ -3,7 +3,7 @@ version: "3.7"
 services:
   mongo:
     restart: always
-    image: mongo:${MONGO_DB_TAG:-latest}
+    image: mongo:${MONGO_TAG:-latest}
     expose:
       - "27017"
     ports:
