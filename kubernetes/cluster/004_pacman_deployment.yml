@@ -1,11 +1,14 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
     name: pacman
   name: pacman
 spec:
-  replicas: 0
+  replicas: 1
+  selector:
+    matchLabels:
+      name: pacman
   template:
     metadata:
       labels:

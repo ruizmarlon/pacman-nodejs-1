@@ -1,4 +1,4 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -6,13 +6,16 @@ metadata:
   name: mongo
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      name: mongo
   template:
     metadata:
       labels:
-        name: mongo:${MONGO_TAG:-latest}
+        name: mongo
     spec:
       containers:
-        - image: mongo
+        - image: mongo:${MONGO_TAG}
           name: mongo
           ports:
             - name: mongo

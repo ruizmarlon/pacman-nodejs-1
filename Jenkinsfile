@@ -6,10 +6,13 @@ DOCKER_IMAGE_REPOSITORY = "pacman-nodejs"
 DOCKER_IMAGE_TAG = "${env.BUILD_TIMESTAMP}"
 
 // For available target clusters, contact your platform administrator
-TARGET_CLUSTER_DOMAIN = "west.us.se.dckr.org"
+TARGET_CLUSTER_DOMAIN = "ucp.west.us.se.dckr.org"
 
 // Available orchestrators = [ "kubernetes" | "swarm" ]
 ORCHESTRATOR = "kubernetes"
+
+// Available ingress = [ "ingress" | "istio_gateway" ]
+KUBERNETES_INGRESS = "ingress"
 
 if(! CLUSTER.containsKey(TARGET_CLUSTER_DOMAIN)){
     error("Unknown cluster '${TARGET_CLUSTER_DOMAIN}'")
@@ -29,7 +32,11 @@ else if (ORCHESTRATOR.toLowerCase() == "swarm"){
     DOCKER_APPLICATION_DOMAIN = "${DOCKER_USER_CLEAN}.${TARGET_CLUSTER['SWARM_DOMAIN_NAME']}"
 }
 else {
-    error("Unsupported orchestrator")
+    error("Unsupported orchestrator '${ORCHESTRATOR}'")
+}
+
+if(! ["ingress", "istio_gateway"].contains(KUBERNETES_INGRESS)){
+    error("Unsupported Kubernetes ingress type '${KUBERNETES_INGRESS}'")
 }
 
 MONGO_TAG="latest"
@@ -64,7 +71,7 @@ node {
 
         def scanning = true
         while(scanning) {
-            def scan_result_response = httpRequest acceptType: 'APPLICATION_JSON', authentication: TARGET_CLUSTER['REGISTRY_CREDENTIALS_ID'], httpMode: 'GET', ignoreSslErrors: true, responseHandle: 'LEAVE_OPEN', url: "${TARGET_CLUSTER['REGISTRY_URI']}/api/v0/imagescan/repositories/${DOCKER_IMAGE_NAMESPACE_DEV}/${DOCKER_IMAGE_REPOSITORY}/${DOCKER_IMAGE_TAG}"
+            def scan_result_response = httpRequest acceptType: 'APPLICATION_JSON', authentication: TARGET_CLUSTER['REGISTRY_CREDENTIALS_ID'], httpMode: 'GET', ignoreSslErrors: true, responseHandle: 'LEAVE_OPEN', url: "${TARGET_CLUSTER['REGISTRY_URI']}/api/v0/imagescan/scansummary/repositories/${DOCKER_IMAGE_NAMESPACE_DEV}/${DOCKER_IMAGE_REPOSITORY}/${DOCKER_IMAGE_TAG}"
             scan_result = readJSON text: scan_result_response.content
 
             if (scan_result.size() != 1) {
@@ -103,18 +110,19 @@ node {
                  "DOCKER_IMAGE_REPOSITORY=${DOCKER_IMAGE_REPOSITORY}",
                  "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}",
                  "DOCKER_USER_CLEAN=${DOCKER_USER_CLEAN}",
-                 "MONGO_TAG=${MONGO_TAG}"
+                 "MONGO_TAG=${MONGO_TAG}",
+                 "KUBERNETES_INGRESS=${KUBERNETES_INGRESS}"
                  ]) {
 
             if(ORCHESTRATOR.toLowerCase() == "kubernetes"){
                 println("Deploying to Kubernetes")
-                withEnv(["DOCKER_KUBERNETES_CONTEXT=${TARGET_CLUSTER['KUBERNETES_CONTEXT']}", "DOCKER_KUBERNETES_NAMESPACE=${DOCKER_KUBERNETES_NAMESPACE}-dev"]) {
-                    sh 'envsubst < kubernetes/cluster/001_mongo_pvc.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/002_mongo_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/003_mongo_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/004_pacman_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/005_pacman_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/006_pacman_ingress.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
+                withEnv(["DOCKER_KUBERNETES_CONTEXT=${TARGET_CLUSTER['KUBERNETES_CONTEXT']}", "KUBERNETES_NAMESPACE=${DOCKER_KUBERNETES_NAMESPACE}-dev"]) {
+                    sh 'envsubst < kubernetes/cluster/001_mongo_pvc.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/002_mongo_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/003_mongo_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/004_pacman_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/005_pacman_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/006_pacman_${KUBERNETES_INGRESS}.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
                 }
             }
             else if (ORCHESTRATOR.toLowerCase() == "swarm"){
@@ -160,18 +168,19 @@ node {
                  "DOCKER_IMAGE_REPOSITORY=${DOCKER_IMAGE_REPOSITORY}",
                  "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}",
                  "DOCKER_USER_CLEAN=${DOCKER_USER_CLEAN}",
-                 "MONGO_TAG=${MONGO_TAG}"
+                 "MONGO_TAG=${MONGO_TAG}",
+                 "KUBERNETES_INGRESS=${KUBERNETES_INGRESS}"
                  ]) {
 
             if(ORCHESTRATOR.toLowerCase() == "kubernetes"){
                 println("Deploying to Kubernetes")
-                withEnv(["DOCKER_KUBERNETES_CONTEXT=${TARGET_CLUSTER['KUBERNETES_CONTEXT']}", "DOCKER_KUBERNETES_NAMESPACE=${DOCKER_KUBERNETES_NAMESPACE}"]) {
-                    sh 'envsubst < kubernetes/cluster/001_mongo_pvc.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/002_mongo_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/003_mongo_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/004_pacman_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/005_pacman_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/006_pacman_ingress.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${DOCKER_KUBERNETES_NAMESPACE} apply -f -'
+                withEnv(["DOCKER_KUBERNETES_CONTEXT=${TARGET_CLUSTER['KUBERNETES_CONTEXT']}", "KUBERNETES_NAMESPACE=${DOCKER_KUBERNETES_NAMESPACE}"]) {
+                    sh 'envsubst < kubernetes/cluster/001_mongo_pvc.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/002_mongo_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/003_mongo_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/004_pacman_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/005_pacman_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/006_pacman_${KUBERNETES_INGRESS}.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
                 }
             }
             else if (ORCHESTRATOR.toLowerCase() == "swarm"){
