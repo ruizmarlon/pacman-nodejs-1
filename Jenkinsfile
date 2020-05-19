@@ -1,12 +1,7 @@
-DOCKER_USER = "${env.BRANCH_NAME}"
-DOCKER_USER_CLEAN = "${DOCKER_USER.replace(".", "")}"
-DOCKER_IMAGE_NAMESPACE_PROD = "${DOCKER_USER_CLEAN}"
-DOCKER_IMAGE_NAMESPACE_DEV = "${DOCKER_IMAGE_NAMESPACE_PROD}-dev"
-DOCKER_IMAGE_REPOSITORY = "pacman-nodejs"
-DOCKER_IMAGE_TAG = "${env.BUILD_TIMESTAMP}"
+IMAGE_REPOSITORY = "pacman-nodejs"
 
 // For available target clusters, contact your platform administrator
-TARGET_CLUSTER_DOMAIN = "ucp.west.us.se.dckr.org"
+TARGET_CLUSTER_DOMAIN = "eu.demo.mirantis.com"
 
 // Available orchestrators = [ "kubernetes" | "swarm" ]
 ORCHESTRATOR = "kubernetes"
@@ -20,19 +15,20 @@ if(! CLUSTER.containsKey(TARGET_CLUSTER_DOMAIN)){
 TARGET_CLUSTER = CLUSTER.get(TARGET_CLUSTER_DOMAIN)
 
 if(ORCHESTRATOR.toLowerCase() == "kubernetes"){
-    DOCKER_KUBERNETES_NAMESPACE = "${DOCKER_USER_CLEAN}"
+    KUBERNETES_NAMESPACE_DEV = "${IMAGE_NAMESPACE_DEV}"
+    KUBERNETES_NAMESPACE_PROD = "${IMAGE_NAMESPACE_PROD}"
 
-    DOCKER_APPLICATION_DOMAIN = "${DOCKER_USER_CLEAN}.${TARGET_CLUSTER['KUBE_DOMAIN_NAME']}"
+    APPLICATION_DOMAIN = "${USERNAME}.${TARGET_CLUSTER['KUBE_DOMAIN_NAME']}"
 }
 else if (ORCHESTRATOR.toLowerCase() == "swarm"){
-    DOCKER_SERVICE_NAME = "${DOCKER_USER_CLEAN}-${DOCKER_IMAGE_REPOSITORY}"
-    DOCKER_STACK_NAME = "${DOCKER_USER_CLEAN}-pacman-nodejs"
-    DOCKER_UCP_COLLECTION_PATH = "/Shared/Private/${DOCKER_USER}"
+    SWARM_SERVICE_NAME = "${USERNAME}-${IMAGE_REPOSITORY}"
+    SWARM_STACK_NAME = "${USERNAME}-${IMAGE_REPOSITORY}"
+    UCP_COLLECTION_PATH = "/Shared/Private/${USERNAME}"
 
-    DOCKER_APPLICATION_DOMAIN = "${DOCKER_USER_CLEAN}.${TARGET_CLUSTER['SWARM_DOMAIN_NAME']}"
+    APPLICATION_DOMAIN = "${USERNAME}.${TARGET_CLUSTER['SWARM_DOMAIN_NAME']}"
 }
 else {
-    error("Unsupported orchestrator '${ORCHESTRATOR}'")
+    error("Unsupported orchestrator")
 }
 
 if(! ["ingress", "istio_gateway"].contains(KUBERNETES_INGRESS)){
@@ -49,29 +45,29 @@ node {
     }
 
     stage('Build') {
-        docker_image = docker.build("${DOCKER_IMAGE_NAMESPACE_DEV}/${DOCKER_IMAGE_REPOSITORY}")
+        docker_image = docker.build("${IMAGE_NAMESPACE_DEV}/${IMAGE_REPOSITORY}")
     }
 
     stage('Unit Tests') {
-        docker_image.inside("--entrypoint=") {
+        docker_image.inside {
             sh 'echo "Tests passed"'
         }
     }
 
     stage('Push') {
         docker.withRegistry(TARGET_CLUSTER['REGISTRY_URI'], TARGET_CLUSTER['REGISTRY_CREDENTIALS_ID']) {
-            docker_image.push(DOCKER_IMAGE_TAG)
+            docker_image.push(IMAGE_TAG)
         }
     }
 
     stage('Scan') {
-        httpRequest acceptType: 'APPLICATION_JSON', authentication: TARGET_CLUSTER['REGISTRY_CREDENTIALS_ID'], contentType: 'APPLICATION_JSON', httpMode: 'POST', ignoreSslErrors: true, responseHandle: 'NONE', url: "${TARGET_CLUSTER['REGISTRY_URI']}/api/v0/imagescan/scan/${DOCKER_IMAGE_NAMESPACE_DEV}/${DOCKER_IMAGE_REPOSITORY}/${DOCKER_IMAGE_TAG}/linux/amd64"
+        httpRequest acceptType: 'APPLICATION_JSON', authentication: TARGET_CLUSTER['REGISTRY_CREDENTIALS_ID'], contentType: 'APPLICATION_JSON', httpMode: 'POST', ignoreSslErrors: true, responseHandle: 'NONE', url: "${TARGET_CLUSTER['REGISTRY_URI']}/api/v0/imagescan/scan/${IMAGE_NAMESPACE_DEV}/${IMAGE_REPOSITORY}/${IMAGE_TAG}/linux/amd64"
 
         def scan_result
 
         def scanning = true
         while(scanning) {
-            def scan_result_response = httpRequest acceptType: 'APPLICATION_JSON', authentication: TARGET_CLUSTER['REGISTRY_CREDENTIALS_ID'], httpMode: 'GET', ignoreSslErrors: true, responseHandle: 'LEAVE_OPEN', url: "${TARGET_CLUSTER['REGISTRY_URI']}/api/v0/imagescan/scansummary/repositories/${DOCKER_IMAGE_NAMESPACE_DEV}/${DOCKER_IMAGE_REPOSITORY}/${DOCKER_IMAGE_TAG}"
+            def scan_result_response = httpRequest acceptType: 'APPLICATION_JSON', authentication: TARGET_CLUSTER['REGISTRY_CREDENTIALS_ID'], httpMode: 'GET', ignoreSslErrors: true, responseHandle: 'LEAVE_OPEN', url: "${TARGET_CLUSTER['REGISTRY_URI']}/api/v0/imagescan/scansummary/repositories/${IMAGE_NAMESPACE_DEV}/${IMAGE_REPOSITORY}/${IMAGE_TAG}"
             scan_result = readJSON text: scan_result_response.content
 
             if (scan_result.size() != 1) {
@@ -92,49 +88,49 @@ node {
     }
 
     stage('Sign Development Image') {
-        withEnv(["DOCKER_REGISTRY_HOSTNAME=${TARGET_CLUSTER['REGISTRY_HOSTNAME']}",
-                 "DOCKER_IMAGE_NAMESPACE=${DOCKER_IMAGE_NAMESPACE_DEV}",
-                 "DOCKER_IMAGE_REPOSITORY=${DOCKER_IMAGE_REPOSITORY}",
-                 "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}"
-                 ]) {
+        withEnv(["REGISTRY_HOSTNAME=${TARGET_CLUSTER['REGISTRY_HOSTNAME']}",
+                 "IMAGE_NAMESPACE=${IMAGE_NAMESPACE_DEV}",
+                 "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}",
+                 "IMAGE_TAG=${IMAGE_TAG}",
+                 "TRUST_SIGNER_KEY=${TARGET_CLUSTER['TRUST_SIGNER_KEY']}"]) {
             withCredentials([string(credentialsId: TARGET_CLUSTER['TRUST_SIGNER_PASSPHRASE_CREDENTIALS_ID'] , variable: 'DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE')]) {
-                sh 'docker trust sign ${DOCKER_REGISTRY_HOSTNAME}/${DOCKER_IMAGE_NAMESPACE}/${DOCKER_IMAGE_REPOSITORY}:${DOCKER_IMAGE_TAG}'
+                sh 'docker trust key load ${TRUST_SIGNER_KEY}'
+                sh 'docker trust sign ${REGISTRY_HOSTNAME}/${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}:${IMAGE_TAG}'
             }
         }
     }
 
     stage('Deploy to Development') {
-        withEnv(["DOCKER_APPLICATION_FQDN=${DOCKER_IMAGE_REPOSITORY}.dev.${DOCKER_APPLICATION_DOMAIN}",
-                 "DOCKER_REGISTRY_HOSTNAME=${TARGET_CLUSTER['REGISTRY_HOSTNAME']}",
-                 "DOCKER_IMAGE_NAMESPACE=${DOCKER_IMAGE_NAMESPACE_DEV}",
-                 "DOCKER_IMAGE_REPOSITORY=${DOCKER_IMAGE_REPOSITORY}",
-                 "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}",
-                 "DOCKER_USER_CLEAN=${DOCKER_USER_CLEAN}",
+        withEnv(["APPLICATION_FQDN=${IMAGE_REPOSITORY}.dev.${APPLICATION_DOMAIN}",
+                 "REGISTRY_HOSTNAME=${TARGET_CLUSTER['REGISTRY_HOSTNAME']}",
+                 "IMAGE_NAMESPACE=${IMAGE_NAMESPACE_DEV}",
+                 "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}",
+                 "IMAGE_TAG=${IMAGE_TAG}",
                  "MONGO_TAG=${MONGO_TAG}",
-                 "KUBERNETES_INGRESS=${KUBERNETES_INGRESS}"
-                 ]) {
-
+                 "USERNAME=${USERNAME}"]) {
             if(ORCHESTRATOR.toLowerCase() == "kubernetes"){
                 println("Deploying to Kubernetes")
-                withEnv(["DOCKER_KUBERNETES_CONTEXT=${TARGET_CLUSTER['KUBERNETES_CONTEXT']}", "KUBERNETES_NAMESPACE=${DOCKER_KUBERNETES_NAMESPACE}-dev"]) {
-                    sh 'envsubst < kubernetes/cluster/001_mongo_pvc.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/002_mongo_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/003_mongo_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/004_pacman_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/005_pacman_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/006_pacman_${KUBERNETES_INGRESS}.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                withEnv(["KUBERNETES_CONTEXT=${TARGET_CLUSTER['KUBERNETES_CONTEXT']}", 
+                         "KUBERNETES_INGRESS=${KUBERNETES_INGRESS}",
+                         "KUBERNETES_NAMESPACE=${KUBERNETES_NAMESPACE_DEV}"]) {
+                    sh 'envsubst < kubernetes/cluster/001_mongo_pvc.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/002_mongo_deployment.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/003_mongo_service.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/004_pacman_deployment.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/005_pacman_service.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/006_pacman_${KUBERNETES_INGRESS}.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
                 }
             }
             else if (ORCHESTRATOR.toLowerCase() == "swarm"){
                 println("Deploying to Swarm")
-                withEnv(["DOCKER_UCP_COLLECTION_PATH=${DOCKER_UCP_COLLECTION_PATH}"]) {
+                withEnv(["UCP_COLLECTION_PATH=${UCP_COLLECTION_PATH}"]) {
                     withDockerServer([credentialsId: TARGET_CLUSTER['UCP_CREDENTIALS_ID'], uri: TARGET_CLUSTER['UCP_URI']]) {
-                        sh "docker stack deploy -c swarm/docker-compose.yml ${DOCKER_STACK_NAME}-dev"
+                        sh "docker stack deploy -c swarm/docker-compose.yml ${SWARM_STACK_NAME}-dev"
                     }
                 }
             }
 
-            println("Application deployed to Development: http://${DOCKER_APPLICATION_FQDN}")
+            println("Application deployed to Development: http://${APPLICATION_FQDN}")
         }
     }
 
@@ -145,54 +141,54 @@ node {
     }
 
     stage('Promote') {
-        httpRequest acceptType: 'APPLICATION_JSON', authentication: TARGET_CLUSTER['REGISTRY_CREDENTIALS_ID'], contentType: 'APPLICATION_JSON', httpMode: 'POST', ignoreSslErrors: true, requestBody: "{\"targetRepository\": \"${DOCKER_IMAGE_NAMESPACE_PROD}/${DOCKER_IMAGE_REPOSITORY}\", \"targetTag\": \"${DOCKER_IMAGE_TAG}\"}", responseHandle: 'NONE', url: "${TARGET_CLUSTER['REGISTRY_URI']}/api/v0/repositories/${DOCKER_IMAGE_NAMESPACE_DEV}/${DOCKER_IMAGE_REPOSITORY}/tags/${DOCKER_IMAGE_TAG}/promotion"
+        httpRequest acceptType: 'APPLICATION_JSON', authentication: TARGET_CLUSTER['REGISTRY_CREDENTIALS_ID'], contentType: 'APPLICATION_JSON', httpMode: 'POST', ignoreSslErrors: true, requestBody: "{\"targetRepository\": \"${IMAGE_NAMESPACE_PROD}/${IMAGE_REPOSITORY}\", \"targetTag\": \"${IMAGE_TAG}\"}", responseHandle: 'NONE', url: "${TARGET_CLUSTER['REGISTRY_URI']}/api/v0/repositories/${IMAGE_NAMESPACE_DEV}/${IMAGE_REPOSITORY}/tags/${IMAGE_TAG}/promotion"
     }
 
     stage('Sign Production Image') {
-        withEnv(["DOCKER_REGISTRY_HOSTNAME=${TARGET_CLUSTER['REGISTRY_HOSTNAME']}",
-                 "DOCKER_IMAGE_NAMESPACE=${DOCKER_IMAGE_NAMESPACE_PROD}",
-                 "DOCKER_IMAGE_REPOSITORY=${DOCKER_IMAGE_REPOSITORY}",
-                 "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}"
-                 ]) {
+        withEnv(["REGISTRY_HOSTNAME=${TARGET_CLUSTER['REGISTRY_HOSTNAME']}",
+                 "IMAGE_NAMESPACE=${IMAGE_NAMESPACE_PROD}",
+                 "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}",
+                 "IMAGE_TAG=${IMAGE_TAG}",
+                 "TRUST_SIGNER_KEY=${TARGET_CLUSTER['TRUST_SIGNER_KEY']}"]) {
             withCredentials([string(credentialsId: TARGET_CLUSTER['TRUST_SIGNER_PASSPHRASE_CREDENTIALS_ID'] , variable: 'DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE')]) {
-                sh 'docker pull ${DOCKER_REGISTRY_HOSTNAME}/${DOCKER_IMAGE_NAMESPACE}/${DOCKER_IMAGE_REPOSITORY}:${DOCKER_IMAGE_TAG}'
-                sh 'docker trust sign ${DOCKER_REGISTRY_HOSTNAME}/${DOCKER_IMAGE_NAMESPACE}/${DOCKER_IMAGE_REPOSITORY}:${DOCKER_IMAGE_TAG}'
+                sh 'docker pull ${REGISTRY_HOSTNAME}/${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}:${IMAGE_TAG}'
+                sh 'docker trust key load ${TRUST_SIGNER_KEY}'
+                sh 'docker trust sign ${REGISTRY_HOSTNAME}/${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}:${IMAGE_TAG}'
             }
         }
     }
 
     stage('Deploy to Production') {
-        withEnv(["DOCKER_APPLICATION_FQDN=${DOCKER_IMAGE_REPOSITORY}.prod.${DOCKER_APPLICATION_DOMAIN}",
-                 "DOCKER_REGISTRY_HOSTNAME=${TARGET_CLUSTER['REGISTRY_HOSTNAME']}",
-                 "DOCKER_IMAGE_NAMESPACE=${DOCKER_IMAGE_NAMESPACE_PROD}",
-                 "DOCKER_IMAGE_REPOSITORY=${DOCKER_IMAGE_REPOSITORY}",
-                 "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}",
-                 "DOCKER_USER_CLEAN=${DOCKER_USER_CLEAN}",
+        withEnv(["APPLICATION_FQDN=${IMAGE_REPOSITORY}.prod.${APPLICATION_DOMAIN}",
+                 "REGISTRY_HOSTNAME=${TARGET_CLUSTER['REGISTRY_HOSTNAME']}",
+                 "IMAGE_NAMESPACE=${IMAGE_NAMESPACE_PROD}",
+                 "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}",
+                 "IMAGE_TAG=${IMAGE_TAG}",
                  "MONGO_TAG=${MONGO_TAG}",
-                 "KUBERNETES_INGRESS=${KUBERNETES_INGRESS}"
-                 ]) {
-
+                 "USERNAME=${USERNAME}"]) {
             if(ORCHESTRATOR.toLowerCase() == "kubernetes"){
                 println("Deploying to Kubernetes")
-                withEnv(["DOCKER_KUBERNETES_CONTEXT=${TARGET_CLUSTER['KUBERNETES_CONTEXT']}", "KUBERNETES_NAMESPACE=${DOCKER_KUBERNETES_NAMESPACE}"]) {
-                    sh 'envsubst < kubernetes/cluster/001_mongo_pvc.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/002_mongo_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/003_mongo_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/004_pacman_deployment.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/005_pacman_service.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
-                    sh 'envsubst < kubernetes/cluster/006_pacman_${KUBERNETES_INGRESS}.yml | kubectl --context=${DOCKER_KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                withEnv(["KUBERNETES_CONTEXT=${TARGET_CLUSTER['KUBERNETES_CONTEXT']}", 
+                         "KUBERNETES_INGRESS=${KUBERNETES_INGRESS}",
+                         "KUBERNETES_NAMESPACE=${KUBERNETES_NAMESPACE_PROD}"]) {
+                    sh 'envsubst < kubernetes/cluster/001_mongo_pvc.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/002_mongo_deployment.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/003_mongo_service.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/004_pacman_deployment.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/005_pacman_service.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
+                    sh 'envsubst < kubernetes/cluster/006_pacman_${KUBERNETES_INGRESS}.yml | kubectl --context=${KUBERNETES_CONTEXT} --namespace=${KUBERNETES_NAMESPACE} apply -f -'
                 }
             }
             else if (ORCHESTRATOR.toLowerCase() == "swarm"){
                 println("Deploying to Swarm")
-                withEnv(["DOCKER_UCP_COLLECTION_PATH=${DOCKER_UCP_COLLECTION_PATH}"]) {
+                withEnv(["UCP_COLLECTION_PATH=${UCP_COLLECTION_PATH}"]) {
                     withDockerServer([credentialsId: TARGET_CLUSTER['UCP_CREDENTIALS_ID'], uri: TARGET_CLUSTER['UCP_URI']]) {
-                        sh "docker stack deploy -c swarm/docker-compose.yml ${DOCKER_STACK_NAME}"
+                        sh "docker stack deploy -c swarm/docker-compose.yml ${SWARM_STACK_NAME}"
                     }
                 }
             }
 
-            println("Application deployed to Production: http://${DOCKER_APPLICATION_FQDN}")
+            println("Application deployed to Production: http://${APPLICATION_FQDN}")
         }
     }
 }

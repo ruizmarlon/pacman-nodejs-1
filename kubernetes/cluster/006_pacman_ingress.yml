@@ -4,7 +4,7 @@ metadata:
   name: pacman
 spec:
   rules:
-    - host: ${DOCKER_APPLICATION_FQDN}
+    - host: ${APPLICATION_FQDN}
       http:
         paths:
           - backend:

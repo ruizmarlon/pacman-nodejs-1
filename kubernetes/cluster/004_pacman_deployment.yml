@@ -24,7 +24,7 @@ spec:
                     values:
                       - linux
       containers:
-        - image: ${DOCKER_REGISTRY_HOSTNAME}/${DOCKER_IMAGE_NAMESPACE}/${DOCKER_IMAGE_REPOSITORY}:${DOCKER_IMAGE_TAG}
+        - image: ${REGISTRY_HOSTNAME}/${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}:${IMAGE_TAG}
           name: pacman
           ports:
             - containerPort: 8080
