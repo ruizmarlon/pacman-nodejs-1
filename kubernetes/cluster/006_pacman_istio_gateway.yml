@@ -4,7 +4,7 @@ metadata:
   name: pacman
 spec:
   hosts:
-    - ${APPLICATION_FQDN}
+    - pacman.kube.maws.mr.dtcntr.net
   gateways:
     - istio-system/demo-gateway
   http:

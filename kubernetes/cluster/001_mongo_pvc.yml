@@ -8,3 +8,5 @@ spec:
   resources:
     requests:
       storage: 4Gi
+  #storageClassName: efs-gp
+  #volumeMode: Filesystem

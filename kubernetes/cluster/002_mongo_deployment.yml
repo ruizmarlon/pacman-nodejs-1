@@ -24,7 +24,7 @@ spec:
                     values:
                       - linux
       containers:
-        - image: mongo:${MONGO_TAG}
+        - image: mongo:4.2.7
           name: mongo
           ports:
             - name: mongo

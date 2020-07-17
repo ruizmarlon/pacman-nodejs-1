@@ -4,7 +4,7 @@ metadata:
   name: pacman
 spec:
   rules:
-    - host: ${APPLICATION_FQDN}
+    - host: pacman.kube.maws.mr.dtcntr.net
       http:
         paths:
           - backend:

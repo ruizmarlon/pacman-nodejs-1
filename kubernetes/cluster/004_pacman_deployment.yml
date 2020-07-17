@@ -24,7 +24,7 @@ spec:
                     values:
                       - linux
       containers:
-        - image: ${REGISTRY_HOSTNAME}/${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}:${IMAGE_TAG}
+        - image: marlonruiz/pacman-nodejs:1.0
           name: pacman
           ports:
             - containerPort: 8080
