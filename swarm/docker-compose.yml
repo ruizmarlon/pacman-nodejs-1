@@ -2,16 +2,42 @@ version: "3.7"
 
 services:
   mongo:
-    restart: always
-    image: mongo:${MONGO_TAG:-latest}
-    expose:
-      - "27017"
-    ports:
-      - "27017:27017"
-
+    deploy:
+      labels:
+        com.docker.ucp.access.label: ${UCP_COLLECTION_PATH}
+      placement:
+        constraints:
+          - "node.labels.com.docker.ucp.collection.system!=true"
+          - "node.labels.com.docker.ucp.collection.swarm==true"
+          - "node.labels.com.docker.ucp.orchestrator.swarm==true"
+          - "node.platform.os==linux"
+    image: ${REGISTRY_HOSTNAME}/official-image/mongo:${MONGO_TAG}
+    networks:
+      - ingress
+      - backend
   pacman:
-    image: ${REGISTRY:-dtr.west.us.se.dckr.org}/${ORGANIZATION:-"launch-party"}/pacman-nodejs:${PACMAN_TAG:-latest}
-    links:
-      - mongo:mongo
-    ports:
-      - "8080:8080"
+    deploy:
+      labels:
+        com.docker.lb.hosts: ${APPLICATION_FQDN}
+        com.docker.lb.network: ${USERNAME}-ingress
+        com.docker.lb.port: 8080
+        com.docker.ucp.access.label: ${UCP_COLLECTION_PATH}
+      placement:
+        constraints:
+          - "node.labels.com.docker.ucp.collection.system!=true"
+          - "node.labels.com.docker.ucp.collection.swarm==true"
+          - "node.labels.com.docker.ucp.orchestrator.swarm==true"
+          - "node.platform.os==linux"
+    image: ${REGISTRY_HOSTNAME}/${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}:${IMAGE_TAG}
+    networks:
+      - ingress
+      - backend
+
+networks:
+  ingress:
+    external: true
+    name: ${USERNAME}-ingress
+  backend:
+    driver: overlay
+    labels:
+      - "com.docker.ucp.access.label=${UCP_COLLECTION_PATH}"
