@@ -24,7 +24,7 @@ Stop the local development enviornment
 
 ```
 cd pacman-nodejs
-bin/linux/development-compose-up.sh
+bin/linux/development-compose-down.sh
 ```
 
 ## Local Production
