@@ -26,7 +26,6 @@ Stop the local development enviornment
 cd pacman-nodejs
 bin/linux/development-compose-up.sh
 ```
-
 ## Local Production
 
 Using `docker-compose` you can start a local production environment. This environment will bind mount the applications
@@ -49,7 +48,7 @@ Stop the local production enviornment
 
 ```
 cd pacman-nodejs
-bin/linux/production-compose-down.sh
+bin/linux/production-compose-up.sh
 ```
 
 ## Production
