@@ -1,6 +1,7 @@
-ARG BASE_IMAGE=node:13.12.0-alpine3.11
+# ARG BASE_IMAGE=node:13.12.0-alpine3.11
 
-FROM ${BASE_IMAGE}
+# FROM ${BASE_IMAGE}
+FROM node:13.12.0-alpine3.11
 
 MAINTAINER Aaron Rueth <arueth@mirantis.com>
 
