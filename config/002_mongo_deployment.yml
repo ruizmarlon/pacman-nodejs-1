@@ -24,7 +24,7 @@ spec:
                     values:
                       - linux
       containers:
-        - image: ${REGISTRY_HOSTNAME}/official-image/mongo:${MONGO_TAG}
+        - image: mongo
           name: mongo
           ports:
             - name: mongo
