@@ -24,7 +24,7 @@ spec:
            #         values:
            #           - linux
       containers:
-        - image: pacman
+        - image: pacman:latest
           name: pacman
           ports:
             - containerPort: 8080
